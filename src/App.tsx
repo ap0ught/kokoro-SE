@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   asBool,
@@ -19,6 +19,26 @@ function App() {
   const [error, setError] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const slot = new URLSearchParams(window.location.search).get("save");
+    if (!slot) return;
+    fetch(`saves/${encodeURIComponent(slot)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      })
+      .then((text) => {
+        const data = isSaveShape(text);
+        if (data) {
+          setSave(data);
+          setFileName(slot);
+        } else {
+          setError("Not a valid Kokoro Kitchen save.");
+        }
+      })
+      .catch((e) => setError(`Couldn't load pre-selected save (${e.message}).`));
+  }, []);
 
   const openFile = async (file: File) => {
     const text = await file.text();
@@ -99,18 +119,7 @@ function App() {
           Open save file
         </div>
         {error && <p className="error">{error}</p>}
-        <p className="hint">
-          Saves live at{" "}
-          <code>
-            .../steamapps/compatdata/3079770/pfx/drive_c/users/steamuser/AppData/LocalLow/MangoLeafGames/Kokoro
-            Kitchen/
-          </code>{" "}
-          on Linux/Proton, or{" "}
-          <code>
-            %USERPROFILE%\AppData\LocalLow\MangoLeafGames\Kokoro Kitchen\
-          </code>{" "}
-          on Windows. Always back up your saves before editing.
-        </p>
+        <SavePath />
       </main>
     );
   }
@@ -530,14 +539,65 @@ function App() {
         </section>
       </div>
 
+      <SavePath />
+
       <footer>
         <p className="hint">
-          Copy the downloaded file back into the save folder (backup the
-          original first). The game rewrites <code>saveDate</code> and totals on
-          the next save.
+          The game rewrites <code>saveDate</code> and stats totals on the next
+          save. Always back up your saves first.
         </p>
       </footer>
     </main>
+  );
+}
+
+function SavePath() {
+  const [copied, setCopied] = useState("");
+
+  const paths: { label: string; path: string }[] = [
+    {
+      label: "Steam on Linux / Steam Deck (Proton)",
+      path: "~/.local/share/Steam/steamapps/compatdata/3079770/pfx/drive_c/users/steamuser/AppData/LocalLow/MangoLeafGames/Kokoro Kitchen/",
+    },
+    {
+      label: "This machine (custom Steam library)",
+      path: "/extdrive/SteamLibrary/steamapps/compatdata/3079770/pfx/drive_c/users/steamuser/AppData/LocalLow/MangoLeafGames/Kokoro Kitchen/",
+    },
+    {
+      label: "Steam on Windows",
+      path: "%USERPROFILE%\\AppData\\LocalLow\\MangoLeafGames\\Kokoro Kitchen\\",
+    },
+  ];
+
+  const copy = (path: string) => {
+    navigator.clipboard?.writeText(path);
+    setCopied(path);
+    setTimeout(() => setCopied(""), 1500);
+  };
+
+  return (
+    <section className="card savepath">
+      <h2>Where to put the save back</h2>
+      <p className="hint">
+        Your download (e.g. <code>saveSlot2.json</code>) replaces the file with
+        the same name in the folder below — copy the original to a backup first.
+      </p>
+      {paths.map(({ label, path }) => (
+        <div className="savepath-row" key={path}>
+          <div>
+            <p className="savepath-label">{label}</p>
+            <code className="savepath-value">{path}</code>
+          </div>
+          <button
+            className="secondary"
+            onClick={() => copy(path)}
+            title="Copy path"
+          >
+            {copied === path ? "Copied" : "Copy"}
+          </button>
+        </div>
+      ))}
+    </section>
   );
 }
 
